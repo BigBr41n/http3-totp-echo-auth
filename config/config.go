@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -16,8 +17,7 @@ type Config struct {
 
 var AppConfig Config
 
-func Init() error {
-
+func load() error {
 	// check for prodution env
 	if os.Getenv("ECHO_AUTH_APP") != "prod" {
 		// use instead .env
@@ -25,14 +25,34 @@ func Init() error {
 			return err
 		}
 	}
+	return nil
+}
 
-	AppConfig = Config{
-		DBUser:     os.Getenv("DB_USER"),
-		DBPassword: os.Getenv("DB_PASSWORD"),
-		DBName:     os.Getenv("DB_NAME"),
-		ServerPort: os.Getenv("SERVER_PORT"),
+func Init() error {
+
+	var err error
+	retries := 3
+	delay := 2 * time.Second
+
+	for i := 0; i < retries; i++ {
+		if err = load(); err != nil {
+			log.Printf("⚠️ Failed to load .env (attempt %d/%d): %v", i+1, retries, err)
+			time.Sleep(delay)
+			continue
+		}
+
+		AppConfig = Config{
+			DBUser:     os.Getenv("DB_USER"),
+			DBPassword: os.Getenv("DB_PASSWORD"),
+			DBName:     os.Getenv("DB_NAME"),
+			ServerPort: os.Getenv("SERVER_PORT"),
+		}
+
+		log.Println("Configuration loaded successfully")
+
+		return nil
 	}
 
-	log.Println("Configuration loaded successfully")
-	return nil
+	return err
+
 }
