@@ -1,17 +1,15 @@
-package main 
-
-
+package main
 
 import (
-	"fmt"
+	"echoAuth/config"
+	"log"
 )
 
-
-
 func main() {
-	fmt.Println("this is a test program")
+
+	if err := config.Init(); err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	log.Println("Loaded succssfully")
 }
-
-
-
-
