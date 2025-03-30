@@ -2,6 +2,8 @@ module echoAuth
 
 go 1.24.1
 
+require github.com/joho/godotenv v1.5.1
+
 require (
 	github.com/labstack/echo/v4 v4.13.3 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
