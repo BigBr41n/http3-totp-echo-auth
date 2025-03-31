@@ -12,6 +12,8 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 	DBName     string
+	DBHost     string
+	DBPort     string
 	ServerPort string
 	ENV        string
 }
@@ -46,6 +48,8 @@ func Init() error {
 			DBUser:     os.Getenv("DB_USER"),
 			DBPassword: os.Getenv("DB_PASSWORD"),
 			DBName:     os.Getenv("DB_NAME"),
+			DBHost:     os.Getenv("DB_HOST"),
+			DBPort:     os.Getenv("DB_PORT"),
 			ServerPort: os.Getenv("SERVER_PORT"),
 			ENV:        os.Getenv("ECHO_AUTH_APP"),
 		}
