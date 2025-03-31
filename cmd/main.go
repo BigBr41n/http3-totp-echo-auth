@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"github.com/BigBr41n/echoAuth/db"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 
 	"github.com/BigBr41n/echoAuth/config"
@@ -15,6 +16,8 @@ func main() {
 	}
 
 	logger.InitLogger(logger.DefaultConfig())
+
+	db.ConnectDB()
 
 	logger.Info("Application started")
 	logger.WithField("user_id", 123).Info("User logged in")
