@@ -13,6 +13,7 @@ type Config struct {
 	DBPassword string
 	DBName     string
 	ServerPort string
+	ENV        string
 }
 
 var AppConfig Config
@@ -46,6 +47,7 @@ func Init() error {
 			DBPassword: os.Getenv("DB_PASSWORD"),
 			DBName:     os.Getenv("DB_NAME"),
 			ServerPort: os.Getenv("SERVER_PORT"),
+			ENV:        os.Getenv("ECHO_AUTH_APP"),
 		}
 
 		log.Println("Configuration loaded successfully")
