@@ -1,15 +1,22 @@
 package main
 
 import (
-	"echoAuth/config"
 	"log"
+
+	"github.com/BigBr41n/echoAuth/internal/logger"
+
+	"github.com/BigBr41n/echoAuth/config"
 )
 
 func main() {
 
 	if err := config.Init(); err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatal("Error While Loading Env Vars")
 	}
 
-	log.Println("Loaded succssfully")
+	logger.InitLogger(logger.DefaultConfig())
+
+	logger.Info("Application started")
+	logger.WithField("user_id", 123).Info("User logged in")
+
 }
