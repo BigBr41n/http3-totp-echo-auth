@@ -2,15 +2,14 @@ package main
 
 import (
 	"log"
-	"time"
-
-	"github.com/BigBr41n/echoAuth/db"
-	"github.com/BigBr41n/echoAuth/internal/logger"
-	"github.com/BigBr41n/echoAuth/models"
-	"github.com/BigBr41n/echoAuth/services"
-	"github.com/google/uuid"
 
 	"github.com/BigBr41n/echoAuth/config"
+	"github.com/BigBr41n/echoAuth/db"
+	"github.com/BigBr41n/echoAuth/db/sqlc"
+	"github.com/BigBr41n/echoAuth/internal/logger"
+	"github.com/BigBr41n/echoAuth/services"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func main() {
@@ -23,17 +22,22 @@ func main() {
 
 	db.ConnectDB()
 
-	userRepo := models.NewUserRepo(db.DBPool)
-	userService := services.NewUserService(userRepo)
+	queries := sqlc.New(db.DBPool)
 
-	userID, err := userService.SignUp(&models.User{
-		ID:        uuid.UUID{},
-		Username:  "R4him",
-		Email:     "testing@gmaol.co",
-		Password:  "pass#--*--$7R0NG",
-		Role:      "client",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	userService := services.NewUserService(queries)
+
+	var pgUUID pgtype.UUID
+	pgUUID.Bytes = uuid.New()
+
+	userID, err := userService.SignUp(&sqlc.CreateUserParams{
+		ID:       pgUUID,
+		Username: "R4him",
+		Email:    "testing@gmaol.co",
+		Password: "pass#--*--$7R0NG",
+		Role: pgtype.Text{
+			String: "client",
+			Valid:  true,
+		},
 	})
 
 	if err != nil {
