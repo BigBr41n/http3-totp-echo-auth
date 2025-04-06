@@ -6,18 +6,18 @@ import (
 
 	"github.com/BigBr41n/echoAuth/config"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CustomAccessTokenClaims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Role   string    `json:"role"`
-	Email  string    `json:"email"`
+	UserID pgtype.UUID `json:"user_id"`
+	Role   pgtype.Text `json:"role"`
+	Email  string      `json:"email"`
 	jwt.RegisteredClaims
 }
 
 type CustomRefreshTokenClaims struct {
-	UserID uuid.UUID `json:"user_id"`
+	UserID pgtype.UUID `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
