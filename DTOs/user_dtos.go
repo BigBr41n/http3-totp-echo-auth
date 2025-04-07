@@ -6,3 +6,8 @@ type CreateUserDTO struct {
 	Password string `json:"password" validate:"required,regexp=^.*(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+]).*$"`
 	Role     string `json:"role" validate:"required,oneof=client seller investor"`
 }
+
+type LoginUserDTO struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
