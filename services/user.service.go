@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	dtos "github.com/BigBr41n/echoAuth/DTOs"
 	"github.com/BigBr41n/echoAuth/db/sqlc"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/BigBr41n/echoAuth/utils/jwtImpl"
@@ -13,7 +14,7 @@ import (
 )
 
 type UserServiceI interface {
-	SignUp(userData *sqlc.CreateUserParams) (pgtype.UUID, error)
+	SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error)
 	Login(creds Credentials) (string, string, error)
 }
 
@@ -32,8 +33,8 @@ type Credentials struct {
 	Password string
 }
 
-func (usr *UserService) SignUp(userData *sqlc.CreateUserParams) (pgtype.UUID, error) {
-	user, err := usr.queries.CreateUser(context.Background(), *userData)
+func (usr *UserService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
+	user, err := usr.queries.CreateUser(context.Background(), (sqlc.CreateUserParams)(*userData))
 	if err != nil {
 		logger.Error(err)
 		return pgtype.UUID{}, fmt.Errorf("failed to create user")
