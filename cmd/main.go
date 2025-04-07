@@ -3,47 +3,51 @@ package main
 import (
 	"log"
 
-	dtos "github.com/BigBr41n/echoAuth/DTOs"
 	"github.com/BigBr41n/echoAuth/config"
+	"github.com/BigBr41n/echoAuth/controllers"
 	"github.com/BigBr41n/echoAuth/db"
 	"github.com/BigBr41n/echoAuth/db/sqlc"
 	"github.com/BigBr41n/echoAuth/internal/logger"
+	"github.com/BigBr41n/echoAuth/routes"
 	"github.com/BigBr41n/echoAuth/services"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
 
+	// load env vars if in dev env
 	if err := config.Init(); err != nil {
 		log.Fatal("Error While Loading Env Vars")
 	}
 
+	// init the logger
 	logger.InitLogger(logger.DefaultConfig())
 
+	// coonnect to DB
 	db.ConnectDB()
 
+	// init SQLC queries
 	queries := sqlc.New(db.DBPool)
 
-	userService := services.NewUserService(queries)
+	// creating auth service and controller
+	authService := services.NewAuthService(queries)
+	authControllers := controllers.NewAuthController(authService)
 
-	var pgUUID pgtype.UUID
-	pgUUID.Bytes = uuid.New()
+	// echo instance & middlewares
+	e := echo.New()
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	e.Use(middleware.CORS())
 
-	userID, err := userService.SignUp(&dtos.CreateUserDTO{
-		Username: "R4him",
-		Email:    "testing@gmaol.co",
-		Password: "pass#--*--$7R0NG",
-		Role:     "client",
-	})
+	// register global custom group
+	api := e.Group("/api/v1")
 
-	if err != nil {
-		logger.Error(err)
+	// register /user routes
+	routes.RegisterUserRoutes(api, authControllers)
+
+	// start the server
+	if err := e.Start(":8080"); err != nil {
+		e.Logger.Fatal("Server failed to start: ", err)
 	}
-
-	logger.Info(userID)
-
-	logger.Info("Application started")
-	logger.WithField("user_id", 123).Info("User logged in")
-
 }
