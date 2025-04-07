@@ -13,17 +13,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type UserServiceI interface {
+type AuthServiceI interface {
 	SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error)
-	Login(creds Credentials) (string, string, error)
+	Login(creds *Credentials) (string, string, error)
 }
 
-type UserService struct {
+type AuthService struct {
 	queries *sqlc.Queries
 }
 
-func NewUserService(qrs *sqlc.Queries) UserServiceI {
-	return &UserService{
+func NewAuthService(qrs *sqlc.Queries) AuthServiceI {
+	return &AuthService{
 		queries: qrs,
 	}
 }
@@ -33,7 +33,7 @@ type Credentials struct {
 	Password string
 }
 
-func (usr *UserService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
+func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
 	user, err := usr.queries.CreateUser(context.Background(), (sqlc.CreateUserParams)(*userData))
 	if err != nil {
 		logger.Error(err)
@@ -42,7 +42,7 @@ func (usr *UserService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 	return user.ID, nil
 }
 
-func (usr *UserService) Login(creds Credentials) (string, string, error) {
+func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 
 	user, err := usr.queries.GetUserByEmail(context.Background(), creds.Email)
 	if err != nil {
