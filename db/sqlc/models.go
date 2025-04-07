@@ -13,7 +13,7 @@ type User struct {
 	Username  string             `json:"username"`
 	Email     string             `json:"email"`
 	Password  string             `json:"password"`
-	Role      pgtype.Text        `json:"role"`
+	Role      string             `json:"role"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
