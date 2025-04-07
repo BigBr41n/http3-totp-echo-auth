@@ -11,7 +11,7 @@ import (
 
 type CustomAccessTokenClaims struct {
 	UserID pgtype.UUID `json:"user_id"`
-	Role   pgtype.Text `json:"role"`
+	Role   string      `json:"role"`
 	Email  string      `json:"email"`
 	jwt.RegisteredClaims
 }
