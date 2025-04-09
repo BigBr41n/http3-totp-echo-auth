@@ -45,6 +45,8 @@ func Init() {
 	core := zapcore.NewCore(jsonEncoder, writer, zap.DebugLevel)
 
 	logger = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+
+	zap.ReplaceGlobals(logger)
 }
 
 // Info logs an informational message.
