@@ -55,28 +55,26 @@ func GenerateToken(data *CustomAccessTokenClaims) (string, string, error) {
 	return signedToken, signedRefToken, nil
 }
 
-func RefreshAccessToken(reftok string, data *CustomAccessTokenClaims) (string, error) {
-	parsedToken, err := jwt.ParseWithClaims(reftok, &CustomRefreshTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
+func RefreshAccessToken(reftok string, old string) (string, error) {
+
+	parsedAccToken, _, err := ParseExtractClaims(old, "access", jwt_sec)
+	if err != nil {
+		return "", err
+	}
+	accClaims := parsedAccToken.Claims.(*CustomAccessTokenClaims)
+
+	_, valid, err := ParseExtractClaims(old, "refresh", jwt_sec)
+	if err != nil || !valid {
+		if !valid {
+			return "", errors.New("reftok not valid")
 		}
-		return []byte(jwt_ref_sec), nil
-	})
-
-	if err != nil || !parsedToken.Valid {
-		return "", errors.New("invalid or expired refresh token")
+		return "", err
 	}
-
-	claims, ok := parsedToken.Claims.(*CustomRefreshTokenClaims)
-	if !ok {
-		return "", errors.New("invalid refresh token claims")
-	}
-
 	// Generate new access token
 	newAccessTokenClaims := CustomAccessTokenClaims{
-		UserID: claims.UserID,
-		Role:   data.Role,
-		Email:  data.Email,
+		UserID: accClaims.UserID,
+		Role:   accClaims.Role,
+		Email:  accClaims.Email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 15)), // 15 minutes expiration
 		},
@@ -84,4 +82,32 @@ func RefreshAccessToken(reftok string, data *CustomAccessTokenClaims) (string, e
 
 	newAccessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newAccessTokenClaims)
 	return newAccessToken.SignedString([]byte(jwt_sec))
+}
+
+func ParseExtractClaims(tok string, typ string, secret string) (jwt.Token, bool, error) {
+	var claims jwt.Claims
+	var err error
+
+	if typ == "access" {
+		claims = &CustomAccessTokenClaims{}
+	} else if typ == "refresh" {
+		claims = &CustomRefreshTokenClaims{}
+	} else {
+		return jwt.Token{}, false, errors.New("invalid token type")
+	}
+
+	// Parse the token
+	parsedToken, err := jwt.ParseWithClaims(tok, claims, func(token *jwt.Token) (interface{}, error) {
+		// Check the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+
+	if err != nil {
+		return jwt.Token{}, false, err // Return any parsing errors
+	}
+
+	return *parsedToken, parsedToken.Valid, nil
 }
