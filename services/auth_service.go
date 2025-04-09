@@ -16,6 +16,7 @@ import (
 type AuthServiceI interface {
 	SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error)
 	Login(creds *Credentials) (string, string, error)
+	RefreshUserToken(reftok string, oldtok string) (string, error)
 }
 
 type AuthService struct {
@@ -72,4 +73,15 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 	}
 
 	return accessToken, refreshToken, nil
+}
+
+func (usr *AuthService) RefreshUserToken(refTok string, oldTok string) (string, error) {
+	newRefTok, err := jwtImpl.RefreshAccessToken(refTok, oldTok)
+
+	if err != nil {
+		logger.Error("refresh token generation failed", err)
+		return "", err
+	}
+
+	return newRefTok, nil
 }
