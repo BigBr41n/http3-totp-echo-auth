@@ -38,7 +38,9 @@ func (uc *AuthController) RegisterNewUser(c echo.Context) error {
 
 	// call singup service
 	if uuid, err = uc.userv.SignUp(&cUserDto); err != nil {
-		return c.JSON(http.StatusBadRequest, "Internal Server Error")
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
 
 	return c.JSON(http.StatusCreated, map[string]interface{}{
