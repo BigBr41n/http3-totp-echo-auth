@@ -3,11 +3,13 @@ package db
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/BigBr41n/echoAuth/config"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 var DBPool *pgxpool.Pool
@@ -34,7 +36,11 @@ func ConnectDB() {
 	}
 
 	if err != nil {
-		logger.Fatal(fmt.Sprintf("Databse connection failed : %v ", err))
+		logger.Fatal("Database Connection Error",
+			zap.String("reason", string(err.Error())),
+			zap.Error(err),
+		)
+		os.Exit(1)
 	}
 }
 
