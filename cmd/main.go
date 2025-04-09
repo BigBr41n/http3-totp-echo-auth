@@ -22,7 +22,7 @@ func main() {
 	}
 
 	// init the logger
-	logger.InitLogger(logger.DefaultConfig())
+	logger.Init()
 
 	// coonnect to DB
 	db.ConnectDB()
@@ -36,7 +36,7 @@ func main() {
 
 	// echo instance & middlewares
 	e := echo.New()
-	e.Use(middleware.Logger())
+	//e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
