@@ -2,19 +2,43 @@ package validator
 
 import (
 	"fmt"
+	"regexp"
 
-	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/go-playground/validator/v10"
 )
 
-// geniric function to validate user inputs
-var validate = validator.New()
+func isValidPassword(password string) bool {
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
+	hasDigit := regexp.MustCompile(`\d`).MatchString(password)
+	hasSpecial := regexp.MustCompile(`[!@#$%^&*()_+]`).MatchString(password)
+
+	return hasLower && hasUpper && hasDigit && hasSpecial
+}
+
+// singleton validator instance
+var validate *validator.Validate
+
+// initialized only once
+func init() {
+	validate = validator.New()
+
+	validate.RegisterValidation("strongpwd", func(fl validator.FieldLevel) bool {
+		return isValidPassword(fl.Field().String())
+	})
+
+	// Register alias for password validation
+	validate.RegisterAlias("pwd", "min=8,max=20,strongpwd")
+}
+
+func GetValidator() *validator.Validate {
+	return validate
+}
 
 func Validate(data interface{}) error {
-	err := validate.Struct(data)
+	err := GetValidator().Struct(data)
 	if err != nil {
-		logger.Error("validation failed", err)
-		return fmt.Errorf("validation failed : %v", err)
+		return fmt.Errorf("validation failed: %v", err)
 	}
 	return nil
 }
