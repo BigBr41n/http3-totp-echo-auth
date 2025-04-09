@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthServiceI interface {
@@ -47,6 +48,17 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 		)
 		return pgtype.UUID{}, err
 	}
+
+	// hashing the password
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(userData.Password), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Error("failed to create user",
+			zap.String("context", "error while hashing the password"),
+			zap.Error(err),
+		)
+	}
+	userData.Password = string(hashedPass)
+
 	user, err := usr.queries.CreateUser(context.Background(), (sqlc.CreateUserParams)(*userData))
 	if err != nil {
 		logger.Error("failed to create user",
@@ -73,7 +85,9 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 		return "", "", err
 	}
 
-	if user.Password != creds.Password {
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password))
+
+	if err != nil {
 		logger.Error("failed passwrod checking operation",
 			zap.String("user", user.ID.String()),
 		)
