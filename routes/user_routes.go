@@ -10,4 +10,5 @@ func RegisterUserRoutes(api *echo.Group, authCtl controllers.AuthControllerI) {
 
 	userRoute.POST("/signup", authCtl.RegisterNewUser)
 	userRoute.POST("/login", authCtl.RegisterNewUser)
+	userRoute.POST("/refresh", authCtl.RefreshAxsToken)
 }
