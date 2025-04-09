@@ -7,6 +7,7 @@ import (
 	"github.com/BigBr41n/echoAuth/controllers"
 	"github.com/BigBr41n/echoAuth/db"
 	"github.com/BigBr41n/echoAuth/db/sqlc"
+	cstm_mdlwr "github.com/BigBr41n/echoAuth/internal/custom_middlewares"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/BigBr41n/echoAuth/routes"
 	"github.com/BigBr41n/echoAuth/services"
@@ -36,7 +37,7 @@ func main() {
 
 	// echo instance & middlewares
 	e := echo.New()
-	//e.Use(middleware.Logger())
+	e.Use(cstm_mdlwr.LoggerMiddleware)
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
