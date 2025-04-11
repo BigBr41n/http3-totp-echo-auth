@@ -6,6 +6,7 @@ import (
 
 	dtos "github.com/BigBr41n/echoAuth/DTOs"
 	"github.com/BigBr41n/echoAuth/services"
+	"github.com/BigBr41n/echoAuth/utils/response"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
 )
@@ -33,20 +34,25 @@ func (uc *AuthController) RegisterNewUser(c echo.Context) error {
 
 	// bind the request body
 	if err = c.Bind(&cUserDto); err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid input")
+		return response.ErrResp(c,
+			http.StatusBadRequest,
+			"INVALID_OR_MISSED_DATA",
+			"missed input data", nil)
 	}
 
 	// call singup service
 	if uuid, err = uc.userv.SignUp(&cUserDto); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
-			"error": err.Error(),
-		})
+		return response.ErrResp(c,
+			http.StatusInternalServerError,
+			"INTERNAL_ERROR",
+			err.Error(), nil)
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"message": "User created successfully",
-		"uuid":    uuid,
-	})
+	return response.ValResp(c,
+		http.StatusCreated,
+		"USER_CREATED",
+		"user created succssfully",
+		map[string]interface{}{"uuid": uuid})
 }
 
 func (uc *AuthController) LoginUser(c echo.Context) error {
@@ -56,16 +62,20 @@ func (uc *AuthController) LoginUser(c echo.Context) error {
 
 	// bind the body
 	if err = c.Bind(&loUserDTO); err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid Input")
+		return response.ErrResp(c,
+			http.StatusBadRequest,
+			"INVALID_OR_MISSED_DATA",
+			"missed input data", nil)
 	}
 
 	// login the user
 	if accessTok, refreshTok, err = uc.userv.Login((*services.Credentials)(&loUserDTO)); err != nil {
-		return c.JSON(http.StatusUnauthorized, "Invalid email or password")
+		return response.ErrResp(c,
+			http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error(), nil)
 	}
 
 	// returning tokens
-	return c.JSON(http.StatusAccepted, map[string]interface{}{
+	return response.ValResp(c, http.StatusAccepted, "SUCCESS", "Loggedin successfully", map[string]interface{}{
 		"message":      "Successfull operation",
 		"accessToken":  accessTok,
 		"refreshToken": refreshTok,
@@ -77,14 +87,10 @@ func (uc AuthController) RefreshAxsToken(c echo.Context) error {
 	oldToken := c.Request().Header.Get("X-Old-Token")
 
 	if authHeader == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "Missing Authorization header",
-		})
+		return response.ErrResp(c, http.StatusBadRequest, "MISSED_DATA", "Missing Authorization header", nil)
 	}
 	if oldToken == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Missing old token",
-		})
+		return response.ErrResp(c, http.StatusBadRequest, "MISSED_DATA", "Old token missed", nil)
 	}
 
 	// Check if it's a Bearer token
