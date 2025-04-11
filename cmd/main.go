@@ -38,7 +38,8 @@ func main() {
 	// echo instance & middlewares
 	e := echo.New()
 	e.Use(cstm_mdlwr.LoggerMiddleware)
-	e.Use(middleware.Recover())
+	//e.Use(middleware.Recover())
+	e.Use(cstm_mdlwr.RecoverWithJSON())
 	e.Use(middleware.CORS())
 
 	// register global custom group
