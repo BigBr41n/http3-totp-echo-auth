@@ -13,9 +13,13 @@ type ValidResponse struct {
 	Data    interface{} `json:"data"`
 }
 
-type ErrResponse struct {
+type ApiErr struct {
 	Status  int    `json:"status"`
-	Error   string `json:"error"`
+	Err     string `json:"error"`
 	Code    string `json:"code"`
 	Details any    `json:"details,omitempty"`
+}
+
+func (apr *ApiErr) Error() string {
+	return apr.Err
 }
