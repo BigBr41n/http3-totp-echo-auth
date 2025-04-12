@@ -5,10 +5,13 @@ import (
 	"strings"
 
 	dtos "github.com/BigBr41n/echoAuth/DTOs"
+	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/BigBr41n/echoAuth/services"
 	"github.com/BigBr41n/echoAuth/utils/response"
+	"github.com/BigBr41n/echoAuth/utils/validator"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 type AuthController struct {
@@ -34,25 +37,36 @@ func (uc *AuthController) RegisterNewUser(c echo.Context) error {
 
 	// bind the request body
 	if err = c.Bind(&cUserDto); err != nil {
-		return response.ErrResp(c,
-			http.StatusBadRequest,
-			"INVALID_OR_MISSED_DATA",
-			"missed input data", nil)
+		return response.ErrResp(c, &dtos.ApiErr{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_OR_MISSED_DATA",
+			Err:     "Invalid input data",
+			Details: nil,
+		})
+	}
+
+	// validation layer
+	err = validator.Validate(&cUserDto)
+	if err != nil {
+		return response.ErrResp(c, &dtos.ApiErr{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_INPUT_FORMAT",
+			Err:     err.Error(),
+			Details: nil,
+		})
 	}
 
 	// call singup service
 	if uuid, err = uc.userv.SignUp(&cUserDto); err != nil {
-		return response.ErrResp(c,
-			http.StatusInternalServerError,
-			"INTERNAL_ERROR",
-			err.Error(), nil)
+		return response.ErrResp(c, err)
 	}
 
-	return response.ValResp(c,
-		http.StatusCreated,
-		"USER_CREATED",
-		"user created succssfully",
-		map[string]interface{}{"uuid": uuid})
+	return response.ValResp(c, &dtos.ValidResponse{
+		Status:  http.StatusCreated,
+		Code:    "USER_CREATED",
+		Data:    map[string]interface{}{"uuid": uuid},
+		Message: "user signed in successfully",
+	})
 }
 
 func (uc *AuthController) LoginUser(c echo.Context) error {
@@ -62,23 +76,29 @@ func (uc *AuthController) LoginUser(c echo.Context) error {
 
 	// bind the body
 	if err = c.Bind(&loUserDTO); err != nil {
-		return response.ErrResp(c,
-			http.StatusBadRequest,
-			"INVALID_OR_MISSED_DATA",
-			"missed input data", nil)
+		logger.Error("binding error", zap.Error(err))
+		return response.ErrResp(c, &dtos.ApiErr{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_OR_MISSED_DATA",
+			Err:     "invalid data",
+			Details: nil,
+		})
 	}
 
 	// login the user
 	if accessTok, refreshTok, err = uc.userv.Login((*services.Credentials)(&loUserDTO)); err != nil {
-		return response.ErrResp(c,
-			http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error(), nil)
+		return response.ErrResp(c, err)
 	}
 
 	// returning tokens
-	return response.ValResp(c, http.StatusAccepted, "SUCCESS", "Loggedin successfully", map[string]interface{}{
-		"message":      "Successfull operation",
-		"accessToken":  accessTok,
-		"refreshToken": refreshTok,
+	return response.ValResp(c, &dtos.ValidResponse{
+		Status:  http.StatusAccepted,
+		Code:    "LOGGED_IN",
+		Message: "user logged in successfully",
+		Data: map[string]interface{}{
+			"accessToken":  accessTok,
+			"refreshToken": refreshTok,
+		},
 	})
 }
 
@@ -86,19 +106,28 @@ func (uc AuthController) RefreshAxsToken(c echo.Context) error {
 	authHeader := c.Request().Header.Get("Authorization")
 	oldToken := c.Request().Header.Get("X-Old-Token")
 
+	authErr := &dtos.ApiErr{
+		Status:  http.StatusBadRequest,
+		Code:    "MISSED_TOKEN_OR_HEADER",
+		Err:     "",
+		Details: nil,
+	}
+
 	if authHeader == "" {
-		return response.ErrResp(c, http.StatusBadRequest, "MISSED_DATA", "Missing Authorization header", nil)
+		authErr.Err = "Autherization header missed"
+		return response.ErrResp(c, authErr)
 	}
 	if oldToken == "" {
-		return response.ErrResp(c, http.StatusBadRequest, "MISSED_DATA", "Old token missed", nil)
+		authErr.Err = "Old token missed"
+		return response.ErrResp(c, authErr)
 	}
 
 	// Check if it's a Bearer token
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "Invalid Authorization header format",
-		})
+		authErr.Err = "Invalid Authorization header format"
+		authErr.Code = "INVALID_TOKEN_FORMAT"
+		return c.JSON(http.StatusUnauthorized, authErr)
 	}
 
 	token := parts[1]
