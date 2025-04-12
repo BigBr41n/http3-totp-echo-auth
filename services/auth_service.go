@@ -2,14 +2,13 @@ package services
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 	"time"
 
 	dtos "github.com/BigBr41n/echoAuth/DTOs"
 	"github.com/BigBr41n/echoAuth/db/sqlc"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/BigBr41n/echoAuth/utils/jwtImpl"
-	"github.com/BigBr41n/echoAuth/utils/validator"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
@@ -39,16 +38,7 @@ type Credentials struct {
 
 func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
 
-	// validate user input
-	err := validator.Validate(userData)
-	if err != nil {
-		logger.Error("failed to create user",
-			zap.String("context", "DTO validation failed"),
-			zap.Error(err),
-		)
-		return pgtype.UUID{}, err
-	}
-
+	//var servErr *dtos.ApiErr
 	// hashing the password
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(userData.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -56,6 +46,13 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 			zap.String("context", "error while hashing the password"),
 			zap.Error(err),
 		)
+
+		return pgtype.UUID{}, &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
 	}
 	userData.Password = string(hashedPass)
 
@@ -65,7 +62,13 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 			zap.String("reason", err.Error()),
 			zap.Error(err),
 		)
-		return pgtype.UUID{}, err
+
+		return pgtype.UUID{}, &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
 	}
 
 	logger.Error("new user created",
@@ -82,7 +85,12 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 			zap.String("reason", err.Error()),
 			zap.Error(err),
 		)
-		return "", "", err
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERR",
+			Err:     err.Error(),
+			Details: nil,
+		}
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password))
@@ -91,7 +99,12 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 		logger.Error("failed passwrod checking operation",
 			zap.String("user", user.ID.String()),
 		)
-		return "", "", fmt.Errorf("invalid credentials")
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_CREDENTIALS",
+			Err:     "Invalid email or password",
+			Details: nil,
+		}
 	}
 
 	claims := &jwtImpl.CustomAccessTokenClaims{
@@ -110,7 +123,12 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 			zap.String("reason", err.Error()),
 			zap.Error(err),
 		)
-		return "", "", err
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
 	}
 
 	logger.Error("User logged in",
@@ -127,7 +145,12 @@ func (usr *AuthService) RefreshUserToken(refTok string, oldTok string) (string, 
 			zap.String("reason", err.Error()),
 			zap.Error(err),
 		)
-		return "", err
+		return "", &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
 	}
 
 	return newRefTok, nil
