@@ -25,9 +25,9 @@ func RecoverWithJSON() echo.MiddlewareFunc {
 						errMsg = r.(string)
 					}
 
-					_ = c.JSON(http.StatusInternalServerError, dtos.ErrResponse{
+					_ = c.JSON(http.StatusInternalServerError, dtos.ApiErr{
 						Status:  http.StatusInternalServerError,
-						Error:   errMsg,
+						Err:     errMsg,
 						Code:    "INTERNAL_ERROR",
 						Details: nil,
 					})
