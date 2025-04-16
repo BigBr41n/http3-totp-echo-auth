@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"time"
 
@@ -154,4 +156,36 @@ func (usr *AuthService) RefreshUserToken(refTok string, oldTok string) (string, 
 	}
 
 	return newRefTok, nil
+}
+
+func (usr AuthService) Enable2FA(userID pgtype.UUID, enable bool) error {
+
+	// enable 2FA in the DB
+	_, err := usr.queries.Set2FAStatus(context.Background(), sqlc.Set2FAStatusParams{
+		ID: userID,
+		TwoFaEnabled: pgtype.Bool{
+			Bool:  enable,
+			Valid: true,
+		},
+	})
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return &dtos.ApiErr{
+				Status:  404,
+				Code:    "USER_NOT_FOUND",
+				Err:     "User not found or no update occurred",
+				Details: nil,
+			}
+		}
+
+		return &dtos.ApiErr{
+			Status:  500,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+
+	return nil
 }
