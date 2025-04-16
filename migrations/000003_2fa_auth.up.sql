@@ -1,0 +1,3 @@
+ALTER TABLE users 
+ADD COLUMN two_fa_enabled BOOL DEFAULT FALSE,
+ADD COLUMN totp_secret TEXT;
