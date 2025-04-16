@@ -24,14 +24,24 @@ type CreateUserParams struct {
 	Role     string `json:"role"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+type CreateUserRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Username  string             `json:"username"`
+	Email     string             `json:"email"`
+	Password  string             `json:"password"`
+	Role      string             `json:"role"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Username,
 		arg.Email,
 		arg.Password,
 		arg.Role,
 	)
-	var i User
+	var i CreateUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -50,9 +60,19 @@ FROM users
 WHERE email = $1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+type GetUserByEmailRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Username  string             `json:"username"`
+	Email     string             `json:"email"`
+	Password  string             `json:"password"`
+	Role      string             `json:"role"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i User
+	var i GetUserByEmailRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -71,8 +91,45 @@ FROM users
 WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
+type GetUserByIDRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Username  string             `json:"username"`
+	Email     string             `json:"email"`
+	Password  string             `json:"password"`
+	Role      string             `json:"role"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i GetUserByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.Password,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const set2FAStatus = `-- name: Set2FAStatus :one
+UPDATE users
+SET two_fa_enabled = $2
+WHERE id = $1
+RETURNING id, username, email, password, role, two_fa_enabled, totp_secret, created_at, updated_at
+`
+
+type Set2FAStatusParams struct {
+	ID           pgtype.UUID `json:"id"`
+	TwoFaEnabled pgtype.Bool `json:"two_fa_enabled"`
+}
+
+func (q *Queries) Set2FAStatus(ctx context.Context, arg Set2FAStatusParams) (User, error) {
+	row := q.db.QueryRow(ctx, set2FAStatus, arg.ID, arg.TwoFaEnabled)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -80,6 +137,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Email,
 		&i.Password,
 		&i.Role,
+		&i.TwoFaEnabled,
+		&i.TotpSecret,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

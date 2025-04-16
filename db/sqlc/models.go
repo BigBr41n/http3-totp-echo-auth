@@ -9,11 +9,13 @@ import (
 )
 
 type User struct {
-	ID        pgtype.UUID        `json:"id"`
-	Username  string             `json:"username"`
-	Email     string             `json:"email"`
-	Password  string             `json:"password"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID           pgtype.UUID        `json:"id"`
+	Username     string             `json:"username"`
+	Email        string             `json:"email"`
+	Password     string             `json:"password"`
+	Role         string             `json:"role"`
+	TwoFaEnabled pgtype.Bool        `json:"two_fa_enabled"`
+	TotpSecret   pgtype.Text        `json:"totp_secret"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
