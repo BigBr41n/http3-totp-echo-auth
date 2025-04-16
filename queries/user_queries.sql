@@ -13,3 +13,13 @@ SELECT id, username, email, password, role, created_at, updated_at
 FROM users
 WHERE id = $1;
 
+
+-- name: Set2FAStatus :one
+UPDATE users
+SET two_fa_enabled = $2
+WHERE id = $1
+RETURNING *;
+
+
+
+
