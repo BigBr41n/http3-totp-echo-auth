@@ -22,11 +22,11 @@ import (
 )
 
 type AuthServiceI interface {
-	SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error)
-	Login(creds *Credentials) (string, string, error)
+	SignUp(ctx context.Context, userData *dtos.CreateUserDTO) (pgtype.UUID, error)
+	Login(ctx context.Context, creds *Credentials) (string, string, error)
 	RefreshUserToken(reftok string, oldtok string) (string, error)
-	ValidateTOTP(userID pgtype.UUID, TOTP string) (string, string, error)
-	Enable2FA(userEmail string, userID pgtype.UUID, enable bool) (string, string, error)
+	ValidateTOTP(ctx context.Context, userID pgtype.UUID, TOTP string) (string, string, error)
+	Enable2FA(ctx context.Context, userEmail string, userID pgtype.UUID, enable bool) (string, string, error)
 }
 
 type AuthService struct {
@@ -46,9 +46,9 @@ type Credentials struct {
 	Password string
 }
 
-func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
+func (usr *AuthService) SignUp(ctx context.Context, userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
 
-	tx, err := transaction.StartTransaction(context.TODO(), usr.db)
+	tx, err := transaction.StartTransaction(ctx, usr.db)
 	if err != nil {
 		logger.Error("error when startsing a transaction",
 			zap.String("context", "error in function start transaction from utils"),
@@ -62,7 +62,7 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 			Details: nil,
 		}
 	}
-	defer tx.Rollback(context.TODO())
+	defer tx.Rollback(ctx)
 	qtx := usr.queries.WithTx(tx)
 
 	// hashing the password
@@ -82,7 +82,7 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 	}
 	userData.Password = string(hashedPass)
 
-	user, err := qtx.CreateUser(context.Background(), (sqlc.CreateUserParams)(*userData))
+	user, err := qtx.CreateUser(ctx, (sqlc.CreateUserParams)(*userData))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Unique violation error code
@@ -114,12 +114,30 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 	logger.Error("new user created",
 		zap.String("userId", user.ID.String()),
 	)
+
+	// commit the transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		logger.Error("failed to create user",
+			zap.String("commit", "failed"),
+			zap.String("reason", err.Error()),
+			zap.Error(err),
+		)
+
+		return pgtype.UUID{}, &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+
 	return user.ID, nil
 }
 
-func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
+func (usr *AuthService) Login(ctx context.Context, creds *Credentials) (string, string, error) {
 
-	user, err := usr.queries.GetUserByEmail(context.Background(), creds.Email)
+	user, err := usr.queries.GetUserByEmail(ctx, creds.Email)
 	if err != nil {
 		logger.Error("failed to login",
 			zap.String("reason", err.Error()),
@@ -227,10 +245,10 @@ func (usr *AuthService) RefreshUserToken(refTok string, oldTok string) (string, 
 	return newRefTok, nil
 }
 
-func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable bool) (string, string, error) {
+func (usr *AuthService) Enable2FA(ctx context.Context, userEmail string, userID pgtype.UUID, enable bool) (string, string, error) {
 
 	// start a transaction
-	tx, err := transaction.StartTransaction(context.TODO(), usr.db)
+	tx, err := transaction.StartTransaction(ctx, usr.db)
 	if err != nil {
 		logger.Error("error when startsing a transaction",
 			zap.String("context", "error in function start transaction from utils"),
@@ -244,11 +262,11 @@ func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable b
 			Details: nil,
 		}
 	}
-	defer tx.Rollback(context.TODO())
+	defer tx.Rollback(ctx)
 	qtx := usr.queries.WithTx(tx)
 
 	// enable 2FA in the DB
-	_, err = qtx.Set2FAStatus(context.Background(), sqlc.Set2FAStatusParams{
+	_, err = qtx.Set2FAStatus(ctx, sqlc.Set2FAStatusParams{
 		ID: userID,
 		TwoFaEnabled: pgtype.Bool{
 			Bool:  enable,
@@ -292,7 +310,7 @@ func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable b
 	secretKey := key.Secret()
 	qrCode := key.URL()
 
-	err = qtx.StoreSecret2FA(context.Background(), sqlc.StoreSecret2FAParams{
+	err = qtx.StoreSecret2FA(ctx, sqlc.StoreSecret2FAParams{
 		ID: userID,
 		TotpSecret: pgtype.Text{
 			String: secretKey,
@@ -309,12 +327,28 @@ func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable b
 		}
 	}
 
+	err = tx.Commit(ctx)
+	if err != nil {
+		logger.Error("failed to enable 2fa",
+			zap.String("commit", "failed"),
+			zap.String("reason", err.Error()),
+			zap.Error(err),
+		)
+
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+
 	return secretKey, qrCode, nil
 }
 
-func (usr *AuthService) ValidateTOTP(userID pgtype.UUID, TOTP string) (string, string, error) {
+func (usr *AuthService) ValidateTOTP(ctx context.Context, userID pgtype.UUID, TOTP string) (string, string, error) {
 
-	user, err := usr.queries.GetUserByID(context.Background(), userID)
+	user, err := usr.queries.GetUserByID(ctx, userID)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
