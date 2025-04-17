@@ -13,8 +13,9 @@ import (
 type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
-	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	Set2FAStatus(ctx context.Context, arg Set2FAStatusParams) (User, error)
+	StoreSecret2FA(ctx context.Context, arg StoreSecret2FAParams) error
 }
 
 var _ Querier = (*Queries)(nil)

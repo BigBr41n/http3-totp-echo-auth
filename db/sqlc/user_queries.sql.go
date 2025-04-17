@@ -55,19 +55,18 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, password, role, created_at, updated_at
+SELECT id, username, email, password, role, two_fa_enabled 
 FROM users
 WHERE email = $1
 `
 
 type GetUserByEmailRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	Username  string             `json:"username"`
-	Email     string             `json:"email"`
-	Password  string             `json:"password"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID           pgtype.UUID `json:"id"`
+	Username     string      `json:"username"`
+	Email        string      `json:"email"`
+	Password     string      `json:"password"`
+	Role         string      `json:"role"`
+	TwoFaEnabled pgtype.Bool `json:"two_fa_enabled"`
 }
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
@@ -79,37 +78,28 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 		&i.Email,
 		&i.Password,
 		&i.Role,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.TwoFaEnabled,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, password, role, created_at, updated_at
+SELECT id, username, email, password, role, two_fa_enabled, totp_secret, created_at, updated_at 
 FROM users
 WHERE id = $1
 `
 
-type GetUserByIDRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	Username  string             `json:"username"`
-	Email     string             `json:"email"`
-	Password  string             `json:"password"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i GetUserByIDRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
 		&i.Email,
 		&i.Password,
 		&i.Role,
+		&i.TwoFaEnabled,
+		&i.TotpSecret,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -143,4 +133,20 @@ func (q *Queries) Set2FAStatus(ctx context.Context, arg Set2FAStatusParams) (Use
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const storeSecret2FA = `-- name: StoreSecret2FA :exec
+UPDATE users 
+SET totp_secret = $2 
+WHERE id = $1
+`
+
+type StoreSecret2FAParams struct {
+	ID         pgtype.UUID `json:"id"`
+	TotpSecret pgtype.Text `json:"totp_secret"`
+}
+
+func (q *Queries) StoreSecret2FA(ctx context.Context, arg StoreSecret2FAParams) error {
+	_, err := q.db.Exec(ctx, storeSecret2FA, arg.ID, arg.TotpSecret)
+	return err
 }

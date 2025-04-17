@@ -4,12 +4,12 @@ VALUES ($1, $2, $3, $4, NOW(), NOW())
 RETURNING id, username, email, password, role, created_at, updated_at;
 
 -- name: GetUserByEmail :one
-SELECT id, username, email, password, role, created_at, updated_at
+SELECT id, username, email, password, role, two_fa_enabled 
 FROM users
 WHERE email = $1;
 
 -- name: GetUserByID :one
-SELECT id, username, email, password, role, created_at, updated_at
+SELECT * 
 FROM users
 WHERE id = $1;
 
@@ -21,5 +21,9 @@ WHERE id = $1
 RETURNING *;
 
 
+-- name: StoreSecret2FA :exec 
+UPDATE users 
+SET totp_secret = $2 
+WHERE id = $1; 
 
 
