@@ -18,6 +18,7 @@ type Config struct {
 	ENV        string
 	JWTSEC     string
 	JWTREFSEC  string
+	JWTTOTP    string
 }
 
 var AppConfig Config
@@ -55,7 +56,8 @@ func Init() error {
 			ServerPort: os.Getenv("SERVER_PORT"),
 			ENV:        os.Getenv("ECHO_AUTH_APP"),
 			JWTSEC:     os.Getenv("JWT_SECRET"),
-			JWTREFSEC:  os.Getenv("JWT-REF-SEC"),
+			JWTREFSEC:  os.Getenv("JWT_REF_SEC"),
+			JWTTOTP:    os.Getenv("JWTTOTP"),
 		}
 
 		log.Println("Configuration loaded successfully")
