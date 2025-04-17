@@ -39,6 +39,10 @@ func NewAuthController(usrSrv services.AuthServiceI) AuthControllerI {
 }
 
 func (uc *AuthController) RegisterNewUser(c echo.Context) error {
+
+	// extract the context
+	ctx := c.Request().Context()
+
 	var cUserDto dtos.CreateUserDTO
 	var err error
 	var uuid pgtype.UUID
@@ -65,7 +69,7 @@ func (uc *AuthController) RegisterNewUser(c echo.Context) error {
 	}
 
 	// call singup service
-	if uuid, err = uc.userv.SignUp(&cUserDto); err != nil {
+	if uuid, err = uc.userv.SignUp(ctx, &cUserDto); err != nil {
 		return response.ErrResp(c, err)
 	}
 
@@ -78,6 +82,9 @@ func (uc *AuthController) RegisterNewUser(c echo.Context) error {
 }
 
 func (uc *AuthController) LoginUser(c echo.Context) error {
+	// extract the context
+	ctx := c.Request().Context()
+
 	var loUserDTO dtos.LoginUserDTO
 	var err error
 	var accessTok, refreshTok string
@@ -94,7 +101,7 @@ func (uc *AuthController) LoginUser(c echo.Context) error {
 	}
 
 	// login the user
-	if accessTok, refreshTok, err = uc.userv.Login((*services.Credentials)(&loUserDTO)); err != nil {
+	if accessTok, refreshTok, err = uc.userv.Login(ctx, (*services.Credentials)(&loUserDTO)); err != nil {
 		return response.ErrResp(c, err)
 	}
 	// returning tokens
@@ -151,6 +158,9 @@ func (uc *AuthController) RefreshAxsToken(c echo.Context) error {
 
 func (uc *AuthController) Enable2FA(c echo.Context) error {
 
+	// extract the context
+	ctx := c.Request().Context()
+
 	userData := c.Get("User").(*jwtImpl.CustomAccessTokenClaims)
 	var secret string
 	var qr string
@@ -158,7 +168,7 @@ func (uc *AuthController) Enable2FA(c echo.Context) error {
 
 	logger.Debug("user enable 2FA test", zap.String("email", userData.Email), zap.String("id", userData.UserID.String()))
 
-	if secret, qr, err = uc.userv.Enable2FA(userData.Email, userData.UserID, true); err != nil {
+	if secret, qr, err = uc.userv.Enable2FA(ctx, userData.Email, userData.UserID, true); err != nil {
 		return response.ErrResp(c, err)
 	}
 
@@ -174,6 +184,10 @@ func (uc *AuthController) Enable2FA(c echo.Context) error {
 }
 
 func (uc *AuthController) ValidateTOTP(c echo.Context) error {
+
+	// extract the context
+	ctx := c.Request().Context()
+
 	var TOTP TOTPInput
 
 	tempToken := c.Request().Header.Get("Autherization")
@@ -197,7 +211,7 @@ func (uc *AuthController) ValidateTOTP(c echo.Context) error {
 	}
 
 	claims := parsedToken.Claims.(*jwtImpl.TempTOTPTokenClaims)
-	accessTok, refreshTok, err := uc.userv.ValidateTOTP(claims.UserID, TOTP.TOTP)
+	accessTok, refreshTok, err := uc.userv.ValidateTOTP(ctx, claims.UserID, TOTP.TOTP)
 	if err != nil {
 		return response.ErrResp(c, err)
 	}
