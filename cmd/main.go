@@ -35,7 +35,7 @@ func main() {
 	queries := sqlc.New(db.DBPool)
 
 	// creating auth service and controller
-	authService := services.NewAuthService(queries)
+	authService := services.NewAuthService(queries, db.DBPool)
 	authControllers := controllers.NewAuthController(authService)
 
 	// echo instance & middlewares
