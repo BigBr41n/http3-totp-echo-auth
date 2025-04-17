@@ -16,6 +16,14 @@ type CustomAccessTokenClaims struct {
 	jwt.RegisteredClaims
 }
 
+type TempTOTPTokenClaims struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Role   string      `json:"role"`
+	Email  string      `json:"email"`
+	TOTP   bool        `json:"totp"`
+	jwt.RegisteredClaims
+}
+
 type CustomRefreshTokenClaims struct {
 	UserID pgtype.UUID `json:"user_id"`
 	jwt.RegisteredClaims
@@ -55,6 +63,16 @@ func GenerateToken(data *CustomAccessTokenClaims) (string, string, error) {
 	return signedToken, signedRefToken, nil
 }
 
+func GenerateTempToken(data *TempTOTPTokenClaims) (string, error) {
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, data)
+	signedToken, err := accessToken.SignedString([]byte(jwt_sec))
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
 func RefreshAccessToken(reftok string, old string) (string, error) {
 
 	parsedAccToken, _, err := ParseExtractClaims(old, "access", jwt_sec)
@@ -92,6 +110,8 @@ func ParseExtractClaims(tok string, typ string, secret string) (jwt.Token, bool,
 		claims = &CustomAccessTokenClaims{}
 	} else if typ == "refresh" {
 		claims = &CustomRefreshTokenClaims{}
+	} else if typ == "temp" {
+		claims = &TempTOTPTokenClaims{}
 	} else {
 		return jwt.Token{}, false, errors.New("invalid token type")
 	}
