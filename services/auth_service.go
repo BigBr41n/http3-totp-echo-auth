@@ -11,8 +11,11 @@ import (
 	"github.com/BigBr41n/echoAuth/db/sqlc"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/BigBr41n/echoAuth/utils/jwtImpl"
+	"github.com/BigBr41n/echoAuth/utils/transaction"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -28,11 +31,13 @@ type AuthServiceI interface {
 
 type AuthService struct {
 	queries *sqlc.Queries
+	db      *pgxpool.Pool
 }
 
-func NewAuthService(qrs *sqlc.Queries) AuthServiceI {
+func NewAuthService(qrs *sqlc.Queries, pgdb *pgxpool.Pool) AuthServiceI {
 	return &AuthService{
 		queries: qrs,
+		db:      pgdb,
 	}
 }
 
@@ -43,7 +48,23 @@ type Credentials struct {
 
 func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error) {
 
-	//var servErr *dtos.ApiErr
+	tx, err := transaction.StartTransaction(context.TODO(), usr.db)
+	if err != nil {
+		logger.Error("error when startsing a transaction",
+			zap.String("context", "error in function start transaction from utils"),
+			zap.Error(err),
+		)
+
+		return pgtype.UUID{}, &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+	defer tx.Rollback(context.TODO())
+	qtx := usr.queries.WithTx(tx)
+
 	// hashing the password
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(userData.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -61,8 +82,22 @@ func (usr *AuthService) SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error
 	}
 	userData.Password = string(hashedPass)
 
-	user, err := usr.queries.CreateUser(context.Background(), (sqlc.CreateUserParams)(*userData))
+	user, err := qtx.CreateUser(context.Background(), (sqlc.CreateUserParams)(*userData))
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Unique violation error code
+			logger.Warn("email already exists",
+				zap.String("email", userData.Email),
+				zap.Error(err),
+			)
+			return pgtype.UUID{}, &dtos.ApiErr{
+				Status:  http.StatusConflict,
+				Code:    "EMAIL_EXISTS",
+				Err:     "email already exists",
+				Details: nil,
+			}
+		}
+
 		logger.Error("failed to create user",
 			zap.String("reason", err.Error()),
 			zap.Error(err),
@@ -194,8 +229,26 @@ func (usr *AuthService) RefreshUserToken(refTok string, oldTok string) (string, 
 
 func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable bool) (string, string, error) {
 
+	// start a transaction
+	tx, err := transaction.StartTransaction(context.TODO(), usr.db)
+	if err != nil {
+		logger.Error("error when startsing a transaction",
+			zap.String("context", "error in function start transaction from utils"),
+			zap.Error(err),
+		)
+
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+	defer tx.Rollback(context.TODO())
+	qtx := usr.queries.WithTx(tx)
+
 	// enable 2FA in the DB
-	_, err := usr.queries.Set2FAStatus(context.Background(), sqlc.Set2FAStatusParams{
+	_, err = qtx.Set2FAStatus(context.Background(), sqlc.Set2FAStatusParams{
 		ID: userID,
 		TwoFaEnabled: pgtype.Bool{
 			Bool:  enable,
@@ -239,7 +292,7 @@ func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable b
 	secretKey := key.Secret()
 	qrCode := key.URL()
 
-	err = usr.queries.StoreSecret2FA(context.Background(), sqlc.StoreSecret2FAParams{
+	err = qtx.StoreSecret2FA(context.Background(), sqlc.StoreSecret2FAParams{
 		ID: userID,
 		TotpSecret: pgtype.Text{
 			String: secretKey,
