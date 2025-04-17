@@ -13,6 +13,7 @@ import (
 	"github.com/BigBr41n/echoAuth/utils/jwtImpl"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -21,6 +22,8 @@ type AuthServiceI interface {
 	SignUp(userData *dtos.CreateUserDTO) (pgtype.UUID, error)
 	Login(creds *Credentials) (string, string, error)
 	RefreshUserToken(reftok string, oldtok string) (string, error)
+	ValidateTOTP(userID pgtype.UUID, TOTP string) (string, string, error)
+	Enable2FA(userEmail string, userID pgtype.UUID, enable bool) (string, string, error)
 }
 
 type AuthService struct {
@@ -98,27 +101,58 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password))
 
 	if err != nil {
-		logger.Error("failed passwrod checking operation",
+		logger.Error("failed password checking operation",
 			zap.String("user", user.ID.String()),
 		)
 		return "", "", &dtos.ApiErr{
-			Status:  http.StatusBadRequest,
+			Status:  http.StatusUnauthorized,
 			Code:    "INVALID_CREDENTIALS",
 			Err:     "Invalid email or password",
 			Details: nil,
 		}
 	}
 
+	// if the user has 2fa enabled
+	if user.TwoFaEnabled.Bool {
+		claims := &jwtImpl.TempTOTPTokenClaims{
+			UserID: user.ID,
+			Role:   user.Role,
+			Email:  creds.Email,
+			TOTP:   true,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+				IssuedAt:  jwt.NewNumericDate(time.Now()),
+			},
+		}
+
+		// generate temp
+		tempToken, err := jwtImpl.GenerateTempToken(claims)
+		if err != nil {
+			logger.Error("failed generate TOTP",
+				zap.String("reason", err.Error()),
+				zap.Error(err),
+			)
+			return "", "", &dtos.ApiErr{
+				Status:  http.StatusInternalServerError,
+				Code:    "INTERNAL_ERROR",
+				Err:     err.Error(),
+				Details: nil,
+			}
+		}
+
+		return tempToken, "TOTP", nil
+	}
+
 	claims := &jwtImpl.CustomAccessTokenClaims{
 		UserID: user.ID,
 		Role:   user.Role,
+		Email:  user.Email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(9 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
-	// generate the auth tokens (access & refresh)
 	accessToken, refreshToken, err := jwtImpl.GenerateToken(claims)
 	if err != nil {
 		logger.Error("failed to login",
@@ -133,7 +167,7 @@ func (usr *AuthService) Login(creds *Credentials) (string, string, error) {
 		}
 	}
 
-	logger.Error("User logged in",
+	logger.Info("User logged in",
 		zap.String("userId", user.ID.String()),
 	)
 	return accessToken, refreshToken, nil
@@ -158,7 +192,7 @@ func (usr *AuthService) RefreshUserToken(refTok string, oldTok string) (string, 
 	return newRefTok, nil
 }
 
-func (usr AuthService) Enable2FA(userID pgtype.UUID, enable bool) error {
+func (usr *AuthService) Enable2FA(userEmail string, userID pgtype.UUID, enable bool) (string, string, error) {
 
 	// enable 2FA in the DB
 	_, err := usr.queries.Set2FAStatus(context.Background(), sqlc.Set2FAStatusParams{
@@ -171,7 +205,7 @@ func (usr AuthService) Enable2FA(userID pgtype.UUID, enable bool) error {
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &dtos.ApiErr{
+			return "", "", &dtos.ApiErr{
 				Status:  404,
 				Code:    "USER_NOT_FOUND",
 				Err:     "User not found or no update occurred",
@@ -179,7 +213,7 @@ func (usr AuthService) Enable2FA(userID pgtype.UUID, enable bool) error {
 			}
 		}
 
-		return &dtos.ApiErr{
+		return "", "", &dtos.ApiErr{
 			Status:  500,
 			Code:    "INTERNAL_ERROR",
 			Err:     err.Error(),
@@ -187,5 +221,103 @@ func (usr AuthService) Enable2FA(userID pgtype.UUID, enable bool) error {
 		}
 	}
 
-	return nil
+	// genrating the totp
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "goEchoAuthApp",
+		AccountName: userEmail,
+	})
+
+	if err != nil {
+		return "", "", &dtos.ApiErr{
+			Status:  500,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+
+	secretKey := key.Secret()
+	qrCode := key.URL()
+
+	err = usr.queries.StoreSecret2FA(context.Background(), sqlc.StoreSecret2FAParams{
+		ID: userID,
+		TotpSecret: pgtype.Text{
+			String: secretKey,
+			Valid:  true,
+		},
+	})
+
+	if err != nil {
+		return "", "", &dtos.ApiErr{
+			Status:  500,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+
+	return secretKey, qrCode, nil
+}
+
+func (usr *AuthService) ValidateTOTP(userID pgtype.UUID, TOTP string) (string, string, error) {
+
+	user, err := usr.queries.GetUserByID(context.Background(), userID)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", "", &dtos.ApiErr{
+				Status:  404,
+				Code:    "USER_NOT_FOUND",
+				Err:     "User not found or no update occurred",
+				Details: nil,
+			}
+		}
+		return "", "", &dtos.ApiErr{
+			Status:  500,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+	// validate the totp
+	valid := totp.Validate(TOTP, user.TotpSecret.String)
+	if !valid {
+		logger.Info("Invalid login", zap.String("userID", userID.String()), zap.String("user OTP", TOTP))
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusUnauthorized,
+			Code:    "INVALID_TOTP",
+			Err:     "Invalid TOTP code",
+			Details: nil,
+		}
+	}
+
+	claims := &jwtImpl.CustomAccessTokenClaims{
+		UserID: user.ID,
+		Role:   user.Role,
+		Email:  user.Email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(9 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	// generate the auth tokens (access & refresh)
+	accessToken, refreshToken, err := jwtImpl.GenerateToken(claims)
+	if err != nil {
+		logger.Error("failed to login",
+			zap.String("reason", err.Error()),
+			zap.Error(err),
+		)
+		return "", "", &dtos.ApiErr{
+			Status:  http.StatusInternalServerError,
+			Code:    "INTERNAL_ERROR",
+			Err:     err.Error(),
+			Details: nil,
+		}
+	}
+
+	logger.Error("User logged in",
+		zap.String("userId", user.ID.String()),
+	)
+	return accessToken, refreshToken, nil
 }
