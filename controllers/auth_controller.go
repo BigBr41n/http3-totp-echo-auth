@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	dtos "github.com/BigBr41n/echoAuth/DTOs"
 	"github.com/BigBr41n/echoAuth/internal/logger"
 	"github.com/BigBr41n/echoAuth/services"
+	"github.com/BigBr41n/echoAuth/utils/jwtImpl"
 	"github.com/BigBr41n/echoAuth/utils/response"
 	"github.com/BigBr41n/echoAuth/utils/validator"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -22,6 +24,12 @@ type AuthControllerI interface {
 	RegisterNewUser(c echo.Context) error
 	LoginUser(c echo.Context) error
 	RefreshAxsToken(c echo.Context) error
+	Enable2FA(c echo.Context) error
+	ValidateTOTP(c echo.Context) error
+}
+
+type TOTPInput struct {
+	TOTP string `json:"totp"`
 }
 
 func NewAuthController(usrSrv services.AuthServiceI) AuthControllerI {
@@ -89,7 +97,6 @@ func (uc *AuthController) LoginUser(c echo.Context) error {
 	if accessTok, refreshTok, err = uc.userv.Login((*services.Credentials)(&loUserDTO)); err != nil {
 		return response.ErrResp(c, err)
 	}
-
 	// returning tokens
 	return response.ValResp(c, &dtos.ValidResponse{
 		Status:  http.StatusAccepted,
@@ -102,7 +109,7 @@ func (uc *AuthController) LoginUser(c echo.Context) error {
 	})
 }
 
-func (uc AuthController) RefreshAxsToken(c echo.Context) error {
+func (uc *AuthController) RefreshAxsToken(c echo.Context) error {
 	authHeader := c.Request().Header.Get("Authorization")
 	oldToken := c.Request().Header.Get("X-Old-Token")
 
@@ -140,4 +147,69 @@ func (uc AuthController) RefreshAxsToken(c echo.Context) error {
 	return c.JSON(http.StatusAccepted, map[string]string{
 		"message": newRefTok,
 	})
+}
+
+func (uc *AuthController) Enable2FA(c echo.Context) error {
+
+	userData := c.Get("User").(*jwtImpl.CustomAccessTokenClaims)
+	var secret string
+	var qr string
+	var err error
+
+	logger.Debug("user enable 2FA test", zap.String("email", userData.Email), zap.String("id", userData.UserID.String()))
+
+	if secret, qr, err = uc.userv.Enable2FA(userData.Email, userData.UserID, true); err != nil {
+		return response.ErrResp(c, err)
+	}
+
+	return response.ValResp(c, &dtos.ValidResponse{
+		Status:  http.StatusAccepted,
+		Code:    "OTP_ENABLED",
+		Message: "otp enabled successfully",
+		Data: map[string]interface{}{
+			"secret": secret,
+			"qr":     qr,
+		},
+	})
+}
+
+func (uc *AuthController) ValidateTOTP(c echo.Context) error {
+	var TOTP TOTPInput
+
+	tempToken := c.Request().Header.Get("Autherization")
+	parsedToken, val, err := jwtImpl.ParseExtractClaims(tempToken, "temp", os.Getenv("JWTTOTP"))
+	if err != nil || !val {
+		return response.ErrResp(c, &dtos.ApiErr{
+			Status:  http.StatusUnauthorized,
+			Code:    "INVALID_TOKEN",
+			Err:     "Temp token for the session is expired login again",
+			Details: nil,
+		})
+	}
+
+	if err := c.Bind(&TOTP); err != nil {
+		return response.ErrResp(c, &dtos.ApiErr{
+			Status:  http.StatusBadRequest,
+			Code:    "INVALID_OR_MISSED_DATA",
+			Err:     "Invalid input data",
+			Details: nil,
+		})
+	}
+
+	claims := parsedToken.Claims.(*jwtImpl.TempTOTPTokenClaims)
+	accessTok, refreshTok, err := uc.userv.ValidateTOTP(claims.UserID, TOTP.TOTP)
+	if err != nil {
+		return response.ErrResp(c, err)
+	}
+
+	return response.ValResp(c, &dtos.ValidResponse{
+		Status:  http.StatusAccepted,
+		Code:    "VERIFIED",
+		Message: "totp verified and logged in successfully",
+		Data: map[string]interface{}{
+			"accessToken":  accessTok,
+			"refreshToken": refreshTok,
+		},
+	})
+
 }
