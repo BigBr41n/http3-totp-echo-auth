@@ -41,6 +41,7 @@ func main() {
 	//e.Use(middleware.Recover())
 	e.Use(cstm_mdlwr.RecoverWithJSON())
 	e.Use(middleware.CORS())
+	e.Use(cstm_mdlwr.ResponseHeadersMiddleware)
 
 	// register global custom group
 	api := e.Group("/api/v1")
