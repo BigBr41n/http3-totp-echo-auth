@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"log"
+	"net/http"
 
 	"github.com/BigBr41n/echoAuth/config"
 	"github.com/BigBr41n/echoAuth/controllers"
@@ -13,6 +15,7 @@ import (
 	"github.com/BigBr41n/echoAuth/services"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/quic-go/quic-go/http3"
 )
 
 func main() {
@@ -49,8 +52,40 @@ func main() {
 	// register /user routes
 	routes.RegisterUserRoutes(api, authControllers)
 
-	// start the server
-	if err := e.Start(":8080"); err != nil {
-		e.Logger.Fatal("Server failed to start: ", err)
+	// http 3 setup
+	tlsCert, err := tls.LoadX509KeyPair("server.crt", "server.key")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		NextProtos:   []string{"h3", "h2", "http/1.1"},
+	}
+
+	handler := e.Server.Handler
+
+	// Create HTTP/3 server
+	h3Server := &http3.Server{
+		Addr:      ":8443",
+		TLSConfig: tlsConf,
+		Handler:   handler,
+	}
+
+	// Run HTTP/1.1 + HTTP/2 (TCP)
+	go func() {
+		logger.Info("HTTP/1.1 and HTTP/2 running on TCP :8443...")
+		httpServer := &http.Server{
+			Addr:      ":8443",
+			TLSConfig: tlsConf,
+			Handler:   handler,
+		}
+		if err := httpServer.ListenAndServeTLS("server.crt", "server.key"); err != http.ErrServerClosed {
+			e.Logger.Fatal(err)
+		}
+	}()
+
+	// start the http3 server
+	if err := h3Server.ListenAndServe(); err != http.ErrServerClosed {
+		e.Logger.Fatal(err)
 	}
 }

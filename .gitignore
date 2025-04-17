@@ -1,3 +1,5 @@
 vendor/
 .env 
 logs/
+server.crt
+server.key
