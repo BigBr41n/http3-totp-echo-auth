@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB_FILE: /run/secrets/db_name
+    secrets:
+      - db_user
+      - db_password
+      - db_name
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-net
+  
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go_api
+    depends_on:
+      - db
+    env_file:
+      - .env.prod
+    ports:
+      - "8443:8443"
+    restart: always
+    networks:
+      - app-net
+
+volumes:
+  db-data:
+
+networks:
+  app-net:
+
+secrets:
+  db_user:
+    external: true
+  db_password:
+    external: true
+  db_name:
+    external: true

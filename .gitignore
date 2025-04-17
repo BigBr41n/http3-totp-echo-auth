@@ -3,3 +3,4 @@ vendor/
 logs/
 server.crt
 server.key
+.env.prod
